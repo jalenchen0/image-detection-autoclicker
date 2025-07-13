@@ -25,14 +25,17 @@ This script uses OpenCV for image detection.
 Make sure Python 3.8+ is installed
 
 ### 2. Install required libraries
-
 ```bash
 pip install opencv-python numpy pyautogui mss
 ```
+
 ### 3. Choose image / change settings
 Make sure to review the settings and make sure your image file name is correct
 
-### 4. Run the file
+### 4. Allow permissions
+On Windows, make sure to run as administrator. On Mac, go to Privacy and Security > Accessibility.
+
+### 5. Run the file
 ```bash
 python main.py
 ```
