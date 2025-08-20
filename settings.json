@@ -1,0 +1,6 @@
+{
+    "image_name": "images/exclamation.png",
+    "box_size": 200,
+    "threshold": 0.75,
+    "show_preview": true
+}

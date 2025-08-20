@@ -1,8 +1,12 @@
 import cv2
 import numpy as np
-import mss
+from mss import mss
 import pyautogui
 import time
+import json
+import os
+import threading
+import dearpygui.dearpygui as dpg
 
 # ===========================================================
 # Image Detection Autoclicker Script
@@ -11,101 +15,171 @@ import time
 # On detection, it autoclicks at the current mouse position
 # until the image is no longer detected.
 # ===========================================================
-# SETTINGS
-image_name = "exclamation.png"  # Name of the image to detect
-box_size = 200  # Size of the detection box (width and height)
-threshold = 0.75  # Minimum confidence percentage for a match
-show_preview = True  # Set to False to disable the preview window
-# ===========================================================
 
-# === Load and preprocess template ===
-template_orig = cv2.imread(f"images/{image_name}", cv2.IMREAD_UNCHANGED)
-template_gray = cv2.cvtColor(template_orig, cv2.COLOR_BGR2GRAY)
-template_gray = cv2.resize(template_gray, (0, 0), fx=0.6, fy=0.6)
+SETTINGS_FILE = "settings.json"
 
-scales = np.linspace(0.8, 1.2, 10)[::-1]
-
-# === Screen region setup ===
-sct = mss.mss()
-screen_width = sct.monitors[1]["width"]
-screen_height = sct.monitors[1]["height"]
-
-monitor = {
-    "top": screen_height // 2 - box_size // 2,
-    "left": screen_width // 2 - box_size // 2,
-    "width": box_size,
-    "height": box_size,
+DEFAULT_SETTINGS = {
+    "image_name": "images/exclamation.png",
+    "box_size": 200,
+    "threshold": 0.75,
+    "show_preview": True
 }
 
-def detect_mark(screen_gray):
-    best_match = None
-    best_val = 0
+running = False
+thread = None
+settings = {}
 
-    for scale in scales:
-        resized_template = cv2.resize(template_gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-        tH, tW = resized_template.shape
+def load_settings():
+    if os.path.exists(SETTINGS_FILE):
+        with open(SETTINGS_FILE, "r") as f:
+            try:
+                return json.load(f)
+            except json.JSONDecodeError:
+                print("⚠️ Error reading settings.json, using defaults.")
+    save_settings(DEFAULT_SETTINGS)
+    return DEFAULT_SETTINGS
 
-        if screen_gray.shape[0] < tH or screen_gray.shape[1] < tW:
-            continue
+def save_settings(settings):
+    with open(SETTINGS_FILE, "w") as f:
+        json.dump(settings, f, indent=4)
 
-        result = cv2.matchTemplate(screen_gray, resized_template, cv2.TM_CCOEFF_NORMED)
-        _, max_val, _, max_loc = cv2.minMaxLoc(result)
 
-        if max_val >= threshold and max_val > best_val:
-            best_match = (max_loc, tW, tH)
-            best_val = max_val
+# ============= BOT LOOP =============
+def bot():
+    global running, settings
 
-    if best_match:
-        (x, y), w, h = best_match
-        return (x, y, w, h, best_val)
-    return None
+    if not os.path.exists(settings["image_name"]):
+        print(f"❌ Template image '{settings['image_name']}' not found!")
+        running = False
+        return
 
-# === FPS tracking ===
-frame_count = 0
-start_time = time.time()
+    template = cv2.imread(settings["image_name"], cv2.IMREAD_GRAYSCALE)
+    template_w, template_h = template.shape[::-1]
 
-print("Running Image Detection Autoclicker Script. Press ESC on the preview window or press Ctrl+C in the terminal to stop the script.")
+    sct = mss()
+    fps_time = time.time()
+    frames = 0
 
-while True:
-    screenshot = np.array(sct.grab(monitor))
-    screen_bgr = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2BGR)
-    screen_gray = cv2.cvtColor(screen_bgr, cv2.COLOR_BGR2GRAY)
+    while running:
+        frames += 1
+        if time.time() - fps_time >= 1:
+            dpg.set_value("fps_text", f"FPS: {frames}")
+            frames = 0
+            fps_time = time.time()
 
-    match = detect_mark(screen_gray)
+        screen_w, screen_h = pyautogui.size()
+        left = screen_w // 2 - settings["box_size"] // 2
+        top = screen_h // 2 - settings["box_size"] // 2
+        monitor = {"left": left, "top": top, "width": settings["box_size"], "height": settings["box_size"]}
 
-    if match:
-        x, y, w, h, confidence = match
-        mouse_x, mouse_y = pyautogui.position()
+        img = np.array(sct.grab(monitor))
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-        # Draw detection box
-        cv2.rectangle(screen_bgr, (x, y), (x + w, y + h), (0, 255, 0), 2)
-        # Show confidence
-        cv2.putText(screen_bgr, f"Confidence: {confidence:.2f}", (x, y - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-        # Auto click
-        pyautogui.click(mouse_x, mouse_y)
-    else:
+        max_val = 0
+        max_loc = None
+        max_scale = 1.0
+        scales = np.linspace(0.5, 1.5, 10)
+
+        for scale in scales:
+            w = int(template_w * scale)
+            h = int(template_h * scale)
+
+            if w > settings["box_size"] or h > settings["box_size"]:
+                continue
+
+            resized_template = cv2.resize(template, (w, h), interpolation=cv2.INTER_AREA)
+            result = cv2.matchTemplate(gray, resized_template, cv2.TM_CCOEFF_NORMED)
+            _, local_max_val, _, local_max_loc = cv2.minMaxLoc(result)
+
+            if local_max_val > max_val:
+                max_val = local_max_val
+                max_loc = local_max_loc
+                max_scale = scale
+
+        dpg.set_value("conf_text", f"Confidence: {max_val:.2f}")
+
+        if max_val >= settings["threshold"]:
+            pyautogui.click()
+
+        if settings["show_preview"]:
+            rgba = cv2.cvtColor(img, cv2.COLOR_BGRA2RGBA)
+            rgba = cv2.resize(rgba, (300, 300))
+            dpg.set_value("preview_texture", rgba.flatten()/255.0)
+
         time.sleep(0.01)
 
-    # FPS calculation
-    frame_count += 1
-    elapsed = time.time() - start_time
-    if elapsed >= 1.0:
-        fps = frame_count / elapsed
-        frame_count = 0
-        start_time = time.time()
-    else:
-        fps = None
 
-    # Draw FPS in corner
-    if fps:
-        cv2.putText(screen_bgr, f"FPS: {fps:.1f}", (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+# ============= UI CALLBACKS =============
+def start_callback(sender, app_data):
+    global running, thread, settings
+    if running:
+        return
 
-    # Show the preview
-    if show_preview:
-        cv2.imshow("Detection Preview", screen_bgr)
-    if cv2.waitKey(1) == 27:  # ESC to quit
-        break
+    settings["image_name"] = dpg.get_value("Image File")
+    settings["box_size"] = dpg.get_value("Box Size")
+    settings["threshold"] = dpg.get_value("Threshold")
+    settings["show_preview"] = dpg.get_value("Show Preview")
 
-cv2.destroyAllWindows()
+    save_settings(settings)
+    running = True
+    thread = threading.Thread(target=bot, daemon=True)
+    thread.start()
+
+def stop_callback(sender, app_data):
+    global running
+    running = False
+
+def save_callback(sender, app_data):
+    global settings
+    settings["image_name"] = dpg.get_value("Image File")
+    settings["box_size"] = dpg.get_value("Box Size")
+    settings["threshold"] = dpg.get_value("Threshold")
+    settings["show_preview"] = dpg.get_value("Show Preview")
+    save_settings(settings)
+
+
+# ============= GUI =============
+def build_gui():
+    global settings
+    settings = load_settings()
+
+    dpg.create_context()
+
+    with dpg.texture_registry():
+        dpg.add_dynamic_texture(300, 300, [0.0] * 300 * 300 * 4, tag="preview_texture")
+
+    with dpg.window(label="Image Detection Autoclicker", width=400, height=750):
+        dpg.add_input_text(label="Image File", default_value=settings["image_name"], tag="Image File")
+        dpg.add_slider_int(label="Box Size", default_value=settings["box_size"], min_value=50, max_value=1000, tag="Box Size")
+        dpg.add_slider_float(label="Threshold", default_value=settings["threshold"], min_value=0.1, max_value=1.0, format="%.2f", tag="Threshold")
+        dpg.add_checkbox(label="Show Preview", default_value=settings["show_preview"], tag="Show Preview")
+
+        dpg.add_button(label="Start", callback=start_callback)
+        dpg.add_button(label="Stop", callback=stop_callback)
+        dpg.add_button(label="Save Settings", callback=save_callback)
+
+        dpg.add_text("FPS: 0", tag="fps_text")
+        dpg.add_text("Confidence: 0.00", tag="conf_text")
+
+        dpg.add_separator()
+        dpg.add_text("Instructions:")
+        dpg.add_text("1. Set the image name")
+        dpg.add_text("2. Adjust detection box size and threshold")
+        dpg.add_text("3. Click Save Settings to save your configuration")
+        dpg.add_text("4. Click Start to begin detection")
+        dpg.add_text("5. Click Stop to end detection")
+        dpg.add_text("The script will autoclick when the image is detected")
+
+        dpg.add_separator()
+        dpg.add_text("Preview:")
+        dpg.add_image("preview_texture")
+
+    dpg.create_viewport(title="Image Detection Autoclicker", width=400, height=750)
+    dpg.setup_dearpygui()
+    dpg.show_viewport()
+    dpg.start_dearpygui()
+    dpg.destroy_context()
+
+
+if __name__ == "__main__":
+    build_gui()
