@@ -1,17 +1,17 @@
 # Image Detection Autoclicker
 
-A fast and flexible Python-based real-time image detector that autoclicks on image detection until the image is no longer detected. Designed for games or apps where a fast response is required upon something appearing, such as an exclamation mark.
+A fast Python-based real-time image detector that autoclicks on image detection until the image is no longer detected. Designed for games or apps where there are quick time events (a fast response is required upon something appearing, such as an exclamation mark).
 
-Make sure to place the images you want to detect in the images folder.
-
-This script uses OpenCV for image detection.
+This script uses OpenCV for image detection and Dear PyGUI for the GUI.
 
 ## Features
+- Clean, easy to use GUI
+- FPS and match confidence display
 - Easy to change settings
 - Detects the selected image on a portion of the screen
 - Supports multi-scale matching
 - Fast detection loop with minimal CPU usage
-- Optional preview with an FPS and match confidence display
+- Optional preview of the detection box
 
 ## Settings
 - Name of the image to detect
@@ -26,7 +26,7 @@ Make sure Python 3.8+ is installed
 
 ### 2. Install required libraries
 ```bash
-pip install opencv-python numpy pyautogui mss
+pip install opencv-python numpy pyautogui mss dearpygui
 ```
 
 ### 3. Choose image / change settings
