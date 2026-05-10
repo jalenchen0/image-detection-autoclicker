@@ -1,8 +1,8 @@
 # Image Detection Autoclicker
 
-A fast Python-based real-time image detector that autoclicks on image detection until the image is no longer detected. Designed for games or apps where there are quick time events (a fast response is required upon something appearing, such as an exclamation mark).
+A fast Python-based real-time image detector that autoclicks until the selected image is no longer detected in the detection box. Designed for games or apps where there are quick time events (a fast response is required upon something appearing, such as an exclamation mark).
 
-This script uses OpenCV for image detection and Dear PyGUI for the GUI.
+This app uses OpenCV for image detection and Dear PyGUI for the GUI.
 
 ## Features
 - Clean, easy to use GUI
@@ -14,10 +14,11 @@ This script uses OpenCV for image detection and Dear PyGUI for the GUI.
 - Optional preview of the detection box
 
 ## Settings
-- Name of the image to detect
-- Size of the detection box (width and height)
+- Path of the image to detect
+- Size and position of the detection box
 - Minimum confidence percentage for a match
-- Turn on or off the preview preview window
+- Preview window toggle
+- Always on top toggle
 
 ## Setup
 
@@ -26,7 +27,7 @@ Make sure Python 3.8+ is installed
 
 ### 2. Install required libraries
 ```bash
-pip install opencv-python numpy pyautogui mss dearpygui
+pip install opencv-python numpy pyautogui mss dearpygui pynput
 ```
 
 ### 3. Choose image / change settings
@@ -39,3 +40,8 @@ On Windows, make sure to run as administrator. On Mac, go to Privacy and Securit
 ```bash
 python main.py
 ```
+
+### 6. Set your settings
+Make sure the image path is correct and the image you intend to detect will appear within the detection box
+
+### 7. Start the bot, and enjoy!
